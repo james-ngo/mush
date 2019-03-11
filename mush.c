@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <string.h>
+#include <signal.h>
 #include "parseline.h"
 #include "mush.h"
 #define DISK 4096
@@ -13,6 +14,18 @@
 int main(int argc, char *argv[]) {
 	int fdin, num;
 	char buf[DISK];
+	/* interrupt signal stuff */
+	struct sigaction sa;
+	sigset_t mask, oldmask;
+	sa.sa_handler = sigint;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	sigprocmask(SIG_BLOCK, &mask, &oldmask);
+	sigdelset(&oldmask, SIGINT);
+	/* end interrupt signal stuff */
 	if (argc == 1) {
 		fdin = STDIN_FILENO;
 	}
@@ -35,7 +48,9 @@ int main(int argc, char *argv[]) {
 			write(STDOUT_FILENO, "8-P ", PROMPT);
 		}
 	}
-	printf("\n");
+	if (fdin == STDIN_FILENO) {
+		printf("\n");
+	}
 	return 0;
 }
 
@@ -52,12 +67,14 @@ void musher(char *buf) {
 	int i, j, status, num_stages;
 	int fd[2] = { STDIN_FILENO, STDOUT_FILENO };
 	pid_t child;
-	if (!*buf) {
+	if (!*buf || *buf == '\n') {
 		return;
 	}
 	cur_line = buf;
 	next_line = break_line(buf);
-	stages = parseline(cur_line, &num_stages);
+	if (NULL == (stages = parseline(cur_line, &num_stages))) {
+		return;
+	}
 	for (i = 0; i < num_stages; i++) {
 		if (strcmp(stages[i].in, "original stdin")) {
 			if (!strcmp(stages[i].in, "pipe")) {
@@ -109,7 +126,7 @@ void musher(char *buf) {
 			}
 			if (-1 == dup2(fd[1], STDOUT_FILENO)) {
 				perror("dup2");
-				exit(6);
+				exit(5);
 			}
 			if (fd[0] != STDIN_FILENO) {
 				printf("close\n");
@@ -121,7 +138,7 @@ void musher(char *buf) {
 			}
 			execvp(stages[i].argv_list[0], stages[i].argv_list);
 			perror(stages[i].argv_list[0]);
-			exit(3);
+			return;
 		}
 		for (j = 0; j < stages[i].argc; j++) {
 			free(stages[i].argv_list[j]);
@@ -132,6 +149,14 @@ void musher(char *buf) {
 		free(stages);
 	}
 	musher(next_line);
+}
+
+void sigint() {
+	int status;
+	while (-1 != wait(&status)) {
+		/* do nothing */
+	}
+	write(STDOUT_FILENO, "\n", 1);
 }
 
 char *break_line(char *cmd) {

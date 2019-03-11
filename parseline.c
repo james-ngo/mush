@@ -49,7 +49,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 					free(argv_list[j]);
 				}
 				free_all(stages, cur_stage);
-				exit(1);			
+				return NULL;			
 			}
 			if (cmdlne[i] == '|' && !out_redir) {
 				sprintf(out, "pipe");
@@ -61,7 +61,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 					free(argv_list[j]);
 				}
 				free(stages);
-				exit(5);
+				return NULL;
 			}
 			if (arg_count < 1) {
 				write(STDERR_FILENO, "invalid null command\n",
@@ -70,7 +70,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 					free(argv_list[j]);
 				}
 				free_all(stages, cur_stage);
-				exit(1);
+				return NULL;
 			}
 			for (j = 0; j < num - 1; j++) {
 				if (cmdlne[j] == '\0') {
@@ -123,7 +123,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 					free(argv_list[j]);
 				}
 				free_all(stages, cur_stage);
-				exit(4);
+				return NULL;
 			}
 			else if (in_redir++) {
 				fprintf(stderr, "%s: bad input redirection\n",
@@ -132,7 +132,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 					free(argv_list[j]);
 				}
 				free_all(stages, cur_stage);
-				exit(3);
+				return NULL;
 			}
 			else {
 				while (cmdlne[++i] == '\0' ||
@@ -154,7 +154,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 						free(argv_list[j]);
 					}
 					free_all(stages, cur_stage);
-					exit(4);
+					return NULL;
 				}
 				in[j] = '\0';
 				i += strlen(in);
@@ -169,7 +169,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 					free(argv_list[j]);
 				}
 				free_all(stages, cur_stage);
-				exit(4);
+				return NULL;
 			}
 			else {
 				while (cmdlne[++i] == '\0' ||
@@ -191,7 +191,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 						free(argv_list[j]);
 					}
 					free_all(stages, cur_stage);
-					exit(4);
+					return NULL;
 				}
 				out[j] = '\0';
 				i += strlen(out);
@@ -211,7 +211,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 				for (j = 0; j < arg_count; j++) {
 					free(argv_list[j]);
 				}
-				exit(7);
+				return NULL;
 			}
 			while (cmdlne[i] == '\0') {
 				i++;

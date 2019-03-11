@@ -7,4 +7,6 @@ void clear_buf(char*);
 
 void musher(char*);
 
+void sigint();
+
 #endif
