@@ -10,6 +10,8 @@ struct stage {
 	char *argv_list[10];
 };
 
+struct stage *parseline(char*, int*);
+
 void print_stage(struct stage*, int);
 
 void free_all(struct stage*, int);

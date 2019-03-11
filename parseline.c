@@ -10,33 +10,20 @@
 #define ARGS_MAX 10
 #define PIPELINE_MAX 10
 
-int main(int argc, char *argv[]) {
-	int num, arg_count, cur_stage = 0, i = 0, in_redir = 0, out_redir = 0;
-	int j, pipe_from = 0;
+struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
+	int num, arg_count = 0, cur_stage = 0, in_redir = 0, out_redir = 0;
+	int j, pipe_from = 0, i = 0;
 	struct stage *stages = (struct stage*)calloc(PIPELINE_MAX,
 		sizeof(struct stage));
 	char *argv_list[ARGS_MAX];
 	char cur_arg[LNMAX];
 	char in[LNMAX];
 	char out[LNMAX];
-	char cmdlne[LNMAX + 1];
 	char *marker;
-	write(STDOUT_FILENO, "line: ", PROMPT);
 /* We read into a buffer of LNMAX + 1. If we read nothing, we throw an error.
  * If we read LNMAX + 1, we throw an error because the maximum command line
  * length has been exceeded. */
-	if (1 >= (num = read(STDIN_FILENO, cmdlne, LNMAX + 1))) {
-		write(STDERR_FILENO, "invalid null command\n", NULLERR);
-		free(stages);
-		exit(1);	
-	}
-	else if (num > LNMAX) {
-		write(STDERR_FILENO,
-			"command line length exceeds max length\n", LENERR);
-		free(stages);
-		exit(2);
-	}
-	cmdlne[strlen(cmdlne) - 1] = '\0';
+	num = strlen(cmdlne);
 	strtok(cmdlne, " ");
 /* We replace any space characters in the command line with null characters.
  * This helps us separate this arguments more easily. */
@@ -49,12 +36,12 @@ int main(int argc, char *argv[]) {
 /* We loop through analyzing each string in the command line. After we
  * scan a particular portion of the command line, we increment i by the length
  * of that portion.*/
-	while (i < num) {
+	while (i < num + 1) {
 /* If we reach a pipe or the end of the line, we a struct stage with all the
  * information about the current stage. We throw an error if we are currently
  * on the 11th stage. We also throw an error if the previous stage indicated
  * output redirection. */
-		if (cmdlne[i] == '|' || num - i == 1) {
+		if (cmdlne[i] == '|' || i >= num) {
 			if (cur_stage > 9) {
 				fprintf(stderr,"maximum number of commands "
 				              "exceeded\n");
@@ -65,7 +52,7 @@ int main(int argc, char *argv[]) {
 				exit(1);			
 			}
 			if (cmdlne[i] == '|' && !out_redir) {
-				sprintf(out, "pipe to stage %d", cur_stage + 1);
+				sprintf(out, "pipe");
 			}
 			else if (cmdlne[i] == '|' && out_redir) {
 				fprintf(stderr, "%s: ambiguous output\n",
@@ -110,7 +97,7 @@ int main(int argc, char *argv[]) {
 			strcpy(stages[cur_stage].in, in);
 			strcpy(stages[cur_stage].out, out);
 			marker = marker + strlen(marker) + 1;
-			sprintf(in, "pipe from stage %d", cur_stage);
+			sprintf(in, "pipe");
 			strcpy(out, "original stdout");
 			in_redir = 1;
 			pipe_from = 1;
@@ -243,9 +230,9 @@ int main(int argc, char *argv[]) {
 			arg_count++;
 		}
 	}
-	print_stage(stages, cur_stage);
-	free(stages);
-	return 0;
+/* Don't forget to free in, out, and the entire argv_list. */
+	*num_stages_ptr = cur_stage;
+	return stages;
 }
 
 /* This function does as the name implies.*/
