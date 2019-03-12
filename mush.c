@@ -9,23 +9,30 @@
 #include "mush.h"
 #define DISK 4096
 #define LNMAX 512
+#define PIPELNE_MAX 10
 #define PROMPT 4
 
+int sig_received = 0;
+
 int main(int argc, char *argv[]) {
-	int fdin, num;
+	int fdin;
 	char buf[DISK];
-	/* interrupt signal stuff */
+	/* interrupt signal stuff
 	struct sigaction sa;
 	sigset_t mask, oldmask;
-	sa.sa_handler = sigint;
+	sa.sa_handler = sigint_handler;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
-	sigaction(SIGINT, &sa, NULL);
+	if (-1 == sigaction(SIGINT, &sa, NULL)) {
+		perror("bummer");
+		exit(3);
+	}
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGINT);
 	sigprocmask(SIG_BLOCK, &mask, &oldmask);
 	sigdelset(&oldmask, SIGINT);
-	/* end interrupt signal stuff */
+	end interrupt signal stuff */
+	signal(SIGINT, sigint_handler);
 	if (argc == 1) {
 		fdin = STDIN_FILENO;
 	}
@@ -41,12 +48,13 @@ int main(int argc, char *argv[]) {
 	if (fdin == STDIN_FILENO) {
 		write(STDOUT_FILENO, "8-P ", PROMPT);
 	}
-	while ((num = read(fdin, buf, DISK)) > 0) {
+	while (read(fdin, buf, DISK) > 0) {
 		musher(buf);
 		clear_buf(buf);
-		if (fdin == STDIN_FILENO) {
+		if (fdin == STDIN_FILENO && !sig_received) {
 			write(STDOUT_FILENO, "8-P ", PROMPT);
 		}
+		sig_received = 0;
 	}
 	if (fdin == STDIN_FILENO) {
 		printf("\n");
@@ -78,7 +86,7 @@ void musher(char *buf) {
 	for (i = 0; i < num_stages; i++) {
 		if (strcmp(stages[i].in, "original stdin")) {
 			if (!strcmp(stages[i].in, "pipe")) {
-				/* pipe from previosu stage */
+				/* pipe from previous stage */
 			}
 			else {
 				if (-1 == (fd[0] = open(stages[i].in,
@@ -114,9 +122,11 @@ void musher(char *buf) {
 				perror("wait");
 				exit(4);
 			}
+			/*
 			if (!WIFEXITED(status) || WEXITSTATUS(status)) {
 				exit(EXIT_FAILURE);
 			}
+			*/
 		}
 		else {
 			/* child */
@@ -129,11 +139,9 @@ void musher(char *buf) {
 				exit(5);
 			}
 			if (fd[0] != STDIN_FILENO) {
-				printf("close\n");
 				close(fd[0]);
 			}
 			if (fd[1] != STDOUT_FILENO) {
-				printf("close\n");
 				close(fd[1]);
 			}
 			execvp(stages[i].argv_list[0], stages[i].argv_list);
@@ -151,12 +159,9 @@ void musher(char *buf) {
 	musher(next_line);
 }
 
-void sigint() {
-	int status;
-	while (-1 != wait(&status)) {
-		/* do nothing */
-	}
-	write(STDOUT_FILENO, "\n", 1);
+void sigint_handler() {
+	sig_received = 1;
+	write(STDOUT_FILENO, "\n8-P ", PROMPT + 1);
 }
 
 char *break_line(char *cmd) {
