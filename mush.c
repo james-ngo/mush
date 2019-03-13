@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
 	if (fdin == STDIN_FILENO) {
 		write(STDOUT_FILENO, "8-P ", PROMPT);
 	}
-	while (read(fdin, buf, DISK) > 0) {
+	while (read(fdin, buf, DISK) > 0 || sig_received) {
 		musher(buf);
 		clear_buf(buf);
 		if (fdin == STDIN_FILENO && !sig_received) {
@@ -91,59 +91,61 @@ void musher(char *buf) {
 		if (!strcmp(stages[i].argv_list[0], "cd")) {
 			chdir(stages[i].argv_list[1]);
 		}
-		else if ((child = fork())) {
-			/* parent */
-			if (-1 == child) {
-				perror("fork");
-				exit(3);
-			}
-			if (-1 == wait(&status)) {
-				perror("wait");
-				exit(4);
-			}
-		}
 		else {
-			/* child */
-			if (!strcmp(stages[i].in, "pipe")) {
-				/* pipe from previous stage */
-				dup2(pipes[i - 1].piperead, STDIN_FILENO);
-			}
-			else if (strcmp(stages[i].in, "original stdin")) {
-				if (-1 == (fdin = open(stages[i].in,
-					O_RDONLY))) {
-					perror(stages[i].in);
+			if ((child = fork())) {
+				/* parent */
+				if (-1 == child) {
+					perror("fork");
 					exit(3);
 				}
-				dup2(fdin, STDIN_FILENO);
-				close(fdin);
-			}
-			if (!strcmp(stages[i].out, "pipe")) {
-				/* pipe to next stage */
-				dup2(pipes[i].pipewrite, STDOUT_FILENO);
-			}
-			else if (strcmp(stages[i].out, "original stdout")) {
-				if (-1 == (fdout = creat(stages[i].out,
-					S_IRUSR | S_IWUSR))) {
-					perror(stages[i].out);
-					exit(3);
+				if (-1 == wait(&status)) {
+					perror("wait");
+					exit(4);
 				}
-				dup2(fdout, STDOUT_FILENO);
-				close(fdout);
 			}
-			for (j = 0; j < num_stages - 1; j++) {
-				close(pipes[j].piperead);
-				close(pipes[j].pipewrite);
+			else {
+				/* child */
+				if (!strcmp(stages[i].in, "pipe")) {
+					/* pipe from previous stage */
+					dup2(pipes[i - 1].piperead, STDIN_FILENO);
+				}
+				else if (strcmp(stages[i].in, "original stdin")) {
+					if (-1 == (fdin = open(stages[i].in,
+						O_RDONLY))) {
+						perror(stages[i].in);
+						exit(3);
+					}
+					dup2(fdin, STDIN_FILENO);
+					close(fdin);
+				}
+				if (!strcmp(stages[i].out, "pipe")) {
+					/* pipe to next stage */
+					dup2(pipes[i].pipewrite, STDOUT_FILENO);
+				}
+				else if (strcmp(stages[i].out, "original stdout")) {
+					if (-1 == (fdout = creat(stages[i].out,
+						S_IRUSR | S_IWUSR))) {
+						perror(stages[i].out);
+						exit(3);
+					}
+					dup2(fdout, STDOUT_FILENO);
+					close(fdout);
+				}
+				for (j = 0; j < num_stages - 1; j++) {
+					close(pipes[j].piperead);
+					close(pipes[j].pipewrite);
+				}
+				execvp(stages[i].argv_list[0], stages[i].argv_list);
+				perror(stages[i].argv_list[0]);
+				return;
 			}
-			execvp(stages[i].argv_list[0], stages[i].argv_list);
-			perror(stages[i].argv_list[0]);
-			return;
+			for (j = 0; j < stages[i].argc; j++) {
+				free(stages[i].argv_list[j]);
+			}
+			free(stages[i].pipeline);
+			free(stages[i].in);
+			free(stages[i].out);
 		}
-		for (j = 0; j < stages[i].argc; j++) {
-			free(stages[i].argv_list[j]);
-		}
-		free(stages[i].pipeline);
-		free(stages[i].in);
-		free(stages[i].out);
 	}
 	free(pipes);
 	free(stages);
