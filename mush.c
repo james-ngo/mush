@@ -72,9 +72,9 @@ void clear_buf(char *buf) {
 void musher(char *buf) {
 	char *cur_line, *next_line;
 	struct stage *stages;
-	int i, j, status, num_stages;
-	int fd[2] = { STDIN_FILENO, STDOUT_FILENO };
+	int i, j, status, num_stages, fdin = STDIN_FILENO, fdout = STDOUT_FILENO;
 	pid_t child;
+	struct pipe *pipes;
 	if (!*buf || *buf == '\n') {
 		return;
 	}
@@ -83,32 +83,11 @@ void musher(char *buf) {
 	if (NULL == (stages = parseline(cur_line, &num_stages))) {
 		return;
 	}
+	pipes = (struct pipe*)malloc(sizeof(struct pipe) * (num_stages - 1));
+	for (i = 0; i < num_stages - 1; i++) {
+		pipe((int*)(pipes + i));
+	}
 	for (i = 0; i < num_stages; i++) {
-		if (strcmp(stages[i].in, "original stdin")) {
-			if (!strcmp(stages[i].in, "pipe")) {
-				/* pipe from previous stage */
-			}
-			else {
-				if (-1 == (fd[0] = open(stages[i].in,
-					O_RDONLY))) {
-					perror(stages[i].in);
-					exit(3);
-				}
-				
-			}
-		}
-		if (strcmp(stages[i].out, "original stdout")) {
-			if (!strcmp(stages[i].out, "pipe")) {
-				pipe(fd);
-			}
-			else {
-				if (-1 == (fd[1] = creat(stages[i].out,
-					S_IRWXU))) {
-					perror(stages[i].out);
-					exit(3);
-				}
-			}
-		}
 		if (!strcmp(stages[i].argv_list[0], "cd")) {
 			chdir(stages[i].argv_list[1]);
 		}
@@ -122,27 +101,38 @@ void musher(char *buf) {
 				perror("wait");
 				exit(4);
 			}
-			/*
-			if (!WIFEXITED(status) || WEXITSTATUS(status)) {
-				exit(EXIT_FAILURE);
-			}
-			*/
 		}
 		else {
 			/* child */
-			if (-1 == dup2(fd[0], STDIN_FILENO)) {
-				perror("dup2");
-				exit(5);
+			if (!strcmp(stages[i].in, "pipe")) {
+				/* pipe from previous stage */
+				dup2(pipes[i - 1].piperead, STDIN_FILENO);
 			}
-			if (-1 == dup2(fd[1], STDOUT_FILENO)) {
-				perror("dup2");
-				exit(5);
+			else if (strcmp(stages[i].in, "original stdin")) {
+				if (-1 == (fdin = open(stages[i].in,
+					O_RDONLY))) {
+					perror(stages[i].in);
+					exit(3);
+				}
+				dup2(fdin, STDIN_FILENO);
+				close(fdin);
 			}
-			if (fd[0] != STDIN_FILENO) {
-				close(fd[0]);
+			if (!strcmp(stages[i].out, "pipe")) {
+				/* pipe to next stage */
+				dup2(pipes[i].pipewrite, STDOUT_FILENO);
 			}
-			if (fd[1] != STDOUT_FILENO) {
-				close(fd[1]);
+			else if (strcmp(stages[i].out, "original stdout")) {
+				if (-1 == (fdout = creat(stages[i].out,
+					S_IRUSR | S_IWUSR))) {
+					perror(stages[i].out);
+					exit(3);
+				}
+				dup2(fdout, STDOUT_FILENO);
+				close(fdout);
+			}
+			for (j = 0; j < num_stages - 1; j++) {
+				close(pipes[j].piperead);
+				close(pipes[j].pipewrite);
 			}
 			execvp(stages[i].argv_list[0], stages[i].argv_list);
 			perror(stages[i].argv_list[0]);
@@ -154,8 +144,9 @@ void musher(char *buf) {
 		free(stages[i].pipeline);
 		free(stages[i].in);
 		free(stages[i].out);
-		free(stages);
 	}
+	free(pipes);
+	free(stages);
 	musher(next_line);
 }
 
