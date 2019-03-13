@@ -80,16 +80,17 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 			cmdlne[i++] = '\0';
 			stages[cur_stage].stage = cur_stage;
 			stages[cur_stage].pipeline = (char*)malloc(sizeof(char)
-				* strlen(marker));
+				* (strlen(marker) + 1));
 			stages[cur_stage].in = (char*)malloc(sizeof(char) *
-				strlen(in));
+				(strlen(in) + 1));
 			stages[cur_stage].out = (char*)malloc(sizeof(char) *
-				strlen(out));
+				(strlen(out) + 1));
 			strcpy(stages[cur_stage].pipeline, marker);
 			stages[cur_stage].argc = arg_count;
 			for (j = 0; j < stages[cur_stage].argc; j++) {
 				stages[cur_stage].argv_list[j] = (char*)malloc(
-					sizeof(char) * strlen(argv_list[j]));
+					sizeof(char) * (strlen(
+					argv_list[j]) + 1));
 				strcpy(stages[cur_stage].argv_list[j],
 					argv_list[j]);
 				free(argv_list[j]);

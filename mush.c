@@ -34,12 +34,12 @@ int main(int argc, char *argv[]) {
 		write(STDOUT_FILENO, "8-P ", PROMPT);
 	}
 	while (read(fdin, buf, DISK) > 0 || sig_received) {
-		sig_received = 0;
 		musher(buf);
 		clear_buf(buf);
 		if (fdin == STDIN_FILENO && !sig_received) {
 			write(STDOUT_FILENO, "8-P ", PROMPT);
 		}
+		sig_received = 0;
 	}
 	if (fdin == STDIN_FILENO) {
 		printf("\n");
@@ -77,26 +77,7 @@ void musher(char *buf) {
 		if (!strcmp(stages[i].argv_list[0], "cd")) {
 			chdir(stages[i].argv_list[1]);
 		}
-		else if ((child = fork())) {
-			/* parent */
-			if (-1 == child) {
-				perror("fork");
-				exit(3);
-			}
-			fprintf(stderr, "parent: %d, child : %d\n",
-				getpid(), child);
-			/*
-			for (j = 0; j < num_stages - 1; j++) {
-				close(pipes[j].piperead);
-				close(pipes[j].pipewrite);
-			}
-			*/
-			if (-1 == wait(&status)) {
-				perror("wait");
-				exit(4);
-			}
-		}
-		else {
+		else if ((child = fork()) == 0) {
 			/* child */
 			if (!strcmp(stages[i].in, "pipe")) {
 				/* pipe from previous stage */
@@ -128,7 +109,6 @@ void musher(char *buf) {
 				close(pipes[j].piperead);
 				close(pipes[j].pipewrite);
 			}
-			fprintf(stderr, "before exec\n");
 			execvp(stages[i].argv_list[0], stages[i].argv_list);
 			perror(stages[i].argv_list[0]);
 			return;
@@ -139,6 +119,18 @@ void musher(char *buf) {
 		free(stages[i].pipeline);
 		free(stages[i].in);
 		free(stages[i].out);
+	}
+	/* parent */
+	if (-1 == child) {
+		perror("fork");
+		exit(3);
+	}
+	for (j = 0; j < num_stages - 1; j++) {
+		close(pipes[j].piperead);
+		close(pipes[j].pipewrite);
+	}
+	while (wait(&status) > 0) {
+		/* do nothing */
 	}
 	free(pipes);
 	free(stages);
