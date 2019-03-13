@@ -17,21 +17,6 @@ int sig_received = 0;
 int main(int argc, char *argv[]) {
 	int fdin;
 	char buf[DISK];
-	/* interrupt signal stuff
-	struct sigaction sa;
-	sigset_t mask, oldmask;
-	sa.sa_handler = sigint_handler;
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = 0;
-	if (-1 == sigaction(SIGINT, &sa, NULL)) {
-		perror("bummer");
-		exit(3);
-	}
-	sigemptyset(&mask);
-	sigaddset(&mask, SIGINT);
-	sigprocmask(SIG_BLOCK, &mask, &oldmask);
-	sigdelset(&oldmask, SIGINT);
-	end interrupt signal stuff */
 	signal(SIGINT, sigint_handler);
 	if (argc == 1) {
 		fdin = STDIN_FILENO;
@@ -49,12 +34,12 @@ int main(int argc, char *argv[]) {
 		write(STDOUT_FILENO, "8-P ", PROMPT);
 	}
 	while (read(fdin, buf, DISK) > 0 || sig_received) {
+		sig_received = 0;
 		musher(buf);
 		clear_buf(buf);
 		if (fdin == STDIN_FILENO && !sig_received) {
 			write(STDOUT_FILENO, "8-P ", PROMPT);
 		}
-		sig_received = 0;
 	}
 	if (fdin == STDIN_FILENO) {
 		printf("\n");
@@ -72,7 +57,8 @@ void clear_buf(char *buf) {
 void musher(char *buf) {
 	char *cur_line, *next_line;
 	struct stage *stages;
-	int i, j, status, num_stages, fdin = STDIN_FILENO, fdout = STDOUT_FILENO;
+	int i, j, status, num_stages, fdin = STDIN_FILENO;
+	int fdout = STDOUT_FILENO;
 	pid_t child;
 	struct pipe *pipes;
 	if (!*buf || *buf == '\n') {
@@ -91,61 +77,68 @@ void musher(char *buf) {
 		if (!strcmp(stages[i].argv_list[0], "cd")) {
 			chdir(stages[i].argv_list[1]);
 		}
+		else if ((child = fork())) {
+			/* parent */
+			if (-1 == child) {
+				perror("fork");
+				exit(3);
+			}
+			fprintf(stderr, "parent: %d, child : %d\n",
+				getpid(), child);
+			/*
+			for (j = 0; j < num_stages - 1; j++) {
+				close(pipes[j].piperead);
+				close(pipes[j].pipewrite);
+			}
+			*/
+			if (-1 == wait(&status)) {
+				perror("wait");
+				exit(4);
+			}
+		}
 		else {
-			if ((child = fork())) {
-				/* parent */
-				if (-1 == child) {
-					perror("fork");
+			/* child */
+			if (!strcmp(stages[i].in, "pipe")) {
+				/* pipe from previous stage */
+				dup2(pipes[i - 1].piperead, STDIN_FILENO);
+			}
+			else if (strcmp(stages[i].in, "original stdin")) {
+				if (-1 == (fdin = open(stages[i].in,
+					O_RDONLY))) {
+					perror(stages[i].in);
 					exit(3);
 				}
-				if (-1 == wait(&status)) {
-					perror("wait");
-					exit(4);
-				}
+				dup2(fdin, STDIN_FILENO);
+				close(fdin);
 			}
-			else {
-				/* child */
-				if (!strcmp(stages[i].in, "pipe")) {
-					/* pipe from previous stage */
-					dup2(pipes[i - 1].piperead, STDIN_FILENO);
-				}
-				else if (strcmp(stages[i].in, "original stdin")) {
-					if (-1 == (fdin = open(stages[i].in,
-						O_RDONLY))) {
-						perror(stages[i].in);
-						exit(3);
-					}
-					dup2(fdin, STDIN_FILENO);
-					close(fdin);
-				}
-				if (!strcmp(stages[i].out, "pipe")) {
-					/* pipe to next stage */
-					dup2(pipes[i].pipewrite, STDOUT_FILENO);
-				}
-				else if (strcmp(stages[i].out, "original stdout")) {
-					if (-1 == (fdout = creat(stages[i].out,
-						S_IRUSR | S_IWUSR))) {
-						perror(stages[i].out);
-						exit(3);
-					}
-					dup2(fdout, STDOUT_FILENO);
-					close(fdout);
-				}
-				for (j = 0; j < num_stages - 1; j++) {
-					close(pipes[j].piperead);
-					close(pipes[j].pipewrite);
-				}
-				execvp(stages[i].argv_list[0], stages[i].argv_list);
-				perror(stages[i].argv_list[0]);
-				return;
+			if (!strcmp(stages[i].out, "pipe")) {
+				/* pipe to next stage */
+				dup2(pipes[i].pipewrite, STDOUT_FILENO);
 			}
-			for (j = 0; j < stages[i].argc; j++) {
-				free(stages[i].argv_list[j]);
+			else if (strcmp(stages[i].out, "original stdout")) {
+				if (-1 == (fdout = creat(stages[i].out,
+					S_IRUSR | S_IWUSR))) {
+					perror(stages[i].out);
+					exit(3);
+				}
+				dup2(fdout, STDOUT_FILENO);
+				close(fdout);
 			}
-			free(stages[i].pipeline);
-			free(stages[i].in);
-			free(stages[i].out);
+			for (j = 0; j < num_stages - 1; j++) {
+				close(pipes[j].piperead);
+				close(pipes[j].pipewrite);
+			}
+			fprintf(stderr, "before exec\n");
+			execvp(stages[i].argv_list[0], stages[i].argv_list);
+			perror(stages[i].argv_list[0]);
+			return;
 		}
+		for (j = 0; j < stages[i].argc; j++) {
+			free(stages[i].argv_list[j]);
+		}
+		free(stages[i].pipeline);
+		free(stages[i].in);
+		free(stages[i].out);
 	}
 	free(pipes);
 	free(stages);
