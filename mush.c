@@ -139,7 +139,9 @@ void musher(char *buf) {
 }
 
 void sigint_handler() {
+	int status;
 	sig_received = 1;
+	wait(&status);
 	write(STDOUT_FILENO, "\n8-P ", PROMPT + 1);
 }
 
