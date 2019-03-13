@@ -33,13 +33,14 @@ int main(int argc, char *argv[]) {
 	if (fdin == STDIN_FILENO) {
 		write(STDOUT_FILENO, "8-P ", PROMPT);
 	}
-	while (read(fdin, buf, DISK) > 0 || sig_received) {
+	while (read(fdin, buf, DISK) > 0) {
+		sig_received = 0;
 		musher(buf);
 		clear_buf(buf);
 		if (fdin == STDIN_FILENO && !sig_received) {
 			write(STDOUT_FILENO, "8-P ", PROMPT);
 		}
-		sig_received = 0;
+
 	}
 	if (fdin == STDIN_FILENO) {
 		printf("\n");
