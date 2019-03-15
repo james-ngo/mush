@@ -1,5 +1,6 @@
 #ifndef MUSH_H
 #define MUSH_H
+#include <signal.h>
 
 struct pipe {
 	int piperead;

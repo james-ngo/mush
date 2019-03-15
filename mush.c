@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <signal.h>
+#include <errno.h>
 #include "parseline.h"
 #include "mush.h"
 #define DISK 4096
@@ -12,12 +13,19 @@
 #define PIPELNE_MAX 10
 #define PROMPT 4
 
+/* This global variable helps with displaying the prompt in the event that a
+ * signal is received. */
+
 int sig_received = 0;
 
 int main(int argc, char *argv[]) {
 	int fdin;
 	char buf[DISK];
-	signal(SIGINT, sigint_handler);
+	struct sigaction sa;
+        sa.sa_handler = sigint_handler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = 0;
+        sigaction(SIGINT, &sa, NULL);
 	if (argc == 1) {
 		fdin = STDIN_FILENO;
 	}
@@ -33,21 +41,30 @@ int main(int argc, char *argv[]) {
 	if (fdin == STDIN_FILENO) {
 		write(STDOUT_FILENO, "8-P ", PROMPT);
 	}
-	while (read(fdin, buf, DISK) > 0) {
-		sig_received = 0;
+	buf[0] = '\0';
+/* We take our input and do practically all the work through the 'musher'
+ * function. We also reprompt if the input is from stdin and we have not yet
+ * received a signal. */
+	while (read(fdin, buf, DISK)) {
 		musher(buf);
 		clear_buf(buf);
-		if (fdin == STDIN_FILENO && !sig_received) {
+		if (fdin == STDIN_FILENO) {
+			if (sig_received) {
+				write(STDOUT_FILENO, "\n", 1);
+			}
 			write(STDOUT_FILENO, "8-P ", PROMPT);
 		}
-
+		sig_received = 0;
 	}
+	/*
 	if (fdin == STDIN_FILENO) {
 		printf("\n");
 	}
+	*/
 	return 0;
 }
 
+/* We clear the input buffer after every musher call. */
 void clear_buf(char *buf) {
 	int i;
 	for (i = 0; i < DISK; i++) {
@@ -55,6 +72,9 @@ void clear_buf(char *buf) {
 	}
 }
 
+/* This does pretty much all the work. It parses input, breaking it into
+ * separate lines and recursively calling itself with the next line as its
+ * input. */
 void musher(char *buf) {
 	char *cur_line, *next_line;
 	struct stage *stages;
@@ -62,11 +82,16 @@ void musher(char *buf) {
 	int fdout = STDOUT_FILENO;
 	pid_t child;
 	struct pipe *pipes;
+/* If the buffer begins with a null character or newline charcters. We have
+ * nothing left to execute. */
 	if (!*buf || *buf == '\n') {
 		return;
 	}
+/* The next two lines are for when we receive the commands from an input file.
+ */
 	cur_line = buf;
 	next_line = break_line(buf);
+/* Here, we parse the line into struct stages and that. */
 	if (NULL == (stages = parseline(cur_line, &num_stages))) {
 		return;
 	}
@@ -88,7 +113,7 @@ void musher(char *buf) {
 				if (-1 == (fdin = open(stages[i].in,
 					O_RDONLY))) {
 					perror(stages[i].in);
-					exit(3);
+					return;
 				}
 				dup2(fdin, STDIN_FILENO);
 				close(fdin);
@@ -133,16 +158,17 @@ void musher(char *buf) {
 	while (wait(&status) > 0) {
 		/* do nothing */
 	}
+	if (errno != ECHILD && errno != EINTR) {
+		perror("wait");
+		exit(2);
+	}
 	free(pipes);
 	free(stages);
 	musher(next_line);
 }
 
 void sigint_handler() {
-	int status;
 	sig_received = 1;
-	wait(&status);
-	write(STDOUT_FILENO, "\n8-P ", PROMPT + 1);
 }
 
 char *break_line(char *cmd) {
