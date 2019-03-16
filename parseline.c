@@ -149,7 +149,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 					/* twiddle */
 				}
 				if (in[j] == '<' || in[j] == '>'
-					|| in[j] == '|') {
+					|| in[j] == '|' || i >= num) {
 					fprintf(stderr,
 						"%s: bad input redirection\n",
 						argv_list[0]);
@@ -186,9 +186,9 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 					/* twiddle */
 				}
 				if (out[j] == '<' || out[j] == '>' ||
-					out[j] == '|') {
+					out[j] == '|' || i >= num) {
 					fprintf(stderr,
-						"%s: output redirection\n",
+						"%s: bad output redirection\n",
 						argv_list[0]);
 					for (j = 0;j < arg_count;j++) {
 						free(argv_list[j]);
