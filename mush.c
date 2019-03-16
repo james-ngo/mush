@@ -42,6 +42,7 @@ int main(int argc, char *argv[]) {
 		write(STDOUT_FILENO, "8-P ", PROMPT);
 	}
 	buf[0] = '\0';
+	sig_received = 0;
 /* We take our input and do practically all the work through the 'musher'
  * function. We also reprompt if the input is from stdin and we have not yet
  * received a signal. */
@@ -90,10 +91,12 @@ void musher(char *buf) {
 	if (NULL == (stages = parseline(cur_line, &num_stages))) {
 		return;
 	}
+/* Creating pipes. */
 	pipes = (struct pipe*)malloc(sizeof(struct pipe) * (num_stages - 1));
 	for (i = 0; i < num_stages - 1; i++) {
 		pipe((int*)(pipes + i));
 	}
+/* For each stage, we redirect input and output as necessary. */
 	for (i = 0; i < num_stages; i++) {
 		if (!strcmp(stages[i].argv_list[0], "cd")) {
 			chdir(stages[i].argv_list[1]);
@@ -105,6 +108,7 @@ void musher(char *buf) {
 				dup2(pipes[i - 1].piperead, STDIN_FILENO);
 			}
 			else if (strcmp(stages[i].in, "original stdin")) {
+				/* Reading a file for input. */
 				if (-1 == (fdin = open(stages[i].in,
 					O_RDONLY))) {
 					perror(stages[i].in);
@@ -118,6 +122,7 @@ void musher(char *buf) {
 				dup2(pipes[i].pipewrite, STDOUT_FILENO);
 			}
 			else if (strcmp(stages[i].out, "original stdout")) {
+				/* Reading/creating file for output. */
 				if (-1 == (fdout = creat(stages[i].out,
 					S_IRUSR | S_IWUSR))) {
 					perror(stages[i].out);
@@ -126,10 +131,12 @@ void musher(char *buf) {
 				dup2(fdout, STDOUT_FILENO);
 				close(fdout);
 			}
+			/* close all the ends of the pipes */
 			for (j = 0; j < num_stages - 1; j++) {
 				close(pipes[j].piperead);
 				close(pipes[j].pipewrite);
 			}
+			/* execute the program with the arguments provided */
 			execvp(stages[i].argv_list[0], stages[i].argv_list);
 			perror(stages[i].argv_list[0]);
 			return;
@@ -146,6 +153,7 @@ void musher(char *buf) {
 		perror("fork");
 		exit(3);
 	}
+	/* closing pipes again */
 	for (j = 0; j < num_stages - 1; j++) {
 		close(pipes[j].piperead);
 		close(pipes[j].pipewrite);
@@ -153,6 +161,8 @@ void musher(char *buf) {
 	while (wait(&status) > 0) {
 		/* do nothing */
 	}
+	/* Making sure we don't boot out of the program because of no children
+	 * or interrupt. */
 	if (errno != ECHILD && errno != EINTR) {
 		perror("wait");
 		exit(2);
@@ -162,11 +172,15 @@ void musher(char *buf) {
 	musher(next_line);
 }
 
+/* We change sig_received to 1 and reprompt but with a newline preceding the
+ * prompt. */
 void sigint_handler() {
 	sig_received = 1;
 	write(STDOUT_FILENO, "\n8-P ", PROMPT + 1);
 }
-
+/* break_line takes in a string, scans until it reaches a newline character,
+ * overwrites the newline with a null character and returns a pointer to the
+ * character immediately following the null. */
 char *break_line(char *cmd) {
 	char *ptr;
 	ptr = cmd;
