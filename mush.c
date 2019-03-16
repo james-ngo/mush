@@ -45,22 +45,17 @@ int main(int argc, char *argv[]) {
 /* We take our input and do practically all the work through the 'musher'
  * function. We also reprompt if the input is from stdin and we have not yet
  * received a signal. */
-	while (read(fdin, buf, DISK)) {
+	while (read(fdin, buf, DISK) > 0 || sig_received) {
 		musher(buf);
 		clear_buf(buf);
-		if (fdin == STDIN_FILENO) {
-			if (sig_received) {
-				write(STDOUT_FILENO, "\n", 1);
-			}
+		if (fdin == STDIN_FILENO && !sig_received) {
 			write(STDOUT_FILENO, "8-P ", PROMPT);
 		}
 		sig_received = 0;
 	}
-	/*
 	if (fdin == STDIN_FILENO) {
 		printf("\n");
 	}
-	*/
 	return 0;
 }
 
@@ -169,6 +164,7 @@ void musher(char *buf) {
 
 void sigint_handler() {
 	sig_received = 1;
+	write(STDOUT_FILENO, "\n8-P ", PROMPT + 1);
 }
 
 char *break_line(char *cmd) {
