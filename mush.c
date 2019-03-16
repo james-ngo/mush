@@ -80,7 +80,7 @@ void musher(char *buf) {
 	struct pipe *pipes;
 /* If the buffer begins with a null character or newline charcters. We have
  * nothing left to execute. */
-	if (!*buf || *buf == '\n') {
+	if (buf == NULL || !*buf || *buf == '\n') {
 		return;
 	}
 /* The next two lines are for when we receive the commands from an input file.

@@ -64,8 +64,10 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 				return NULL;
 			}
 			if (arg_count < 1) {
-				write(STDERR_FILENO, "invalid null command\n",
-					NULLERR);
+				if (cmdlne[i] == '|' || cur_stage) {
+					write(STDERR_FILENO, "invalid null "
+						"command\n", NULLERR);
+				}
 				for (j = 0; j < arg_count; j++) {
 					free(argv_list[j]);
 				}
@@ -126,7 +128,7 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 				free_all(stages, cur_stage);
 				return NULL;
 			}
-			else if (in_redir++) {
+			else if (in_redir++ || !arg_count) {
 				fprintf(stderr, "%s: bad input redirection\n",
 					argv_list[0]);
 				for (j = 0; j < arg_count; j++) {
@@ -163,8 +165,8 @@ struct stage *parseline(char *cmdlne, int *num_stages_ptr) {
 		}
 /* We do pretty much the exact same thing for '>' as we do for '<'. */
 		else if (cmdlne[i] == '>') {
-			if (out_redir++) {
-				fprintf(stderr, "%s: bad output redirection",
+			if (out_redir++ || !arg_count) {
+				fprintf(stderr, "%s: bad output redirection\n",
 					argv_list[0]);
 				for (j = 0; j < arg_count; j++) {
 					free(argv_list[j]);
